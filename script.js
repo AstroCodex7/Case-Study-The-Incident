@@ -64,4 +64,61 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     });
+
+    // --- 4. Simple slow smooth-scroll for fragment links (no data attributes needed) ---
+    const SCROLL_DURATION = 1200; // ms, change to taste
+
+    function smoothScrollTo(element, duration = SCROLL_DURATION, callback) {
+        const startY = window.scrollY || window.pageYOffset;
+        const targetRect = element.getBoundingClientRect();
+        const targetY = startY + targetRect.top;
+        const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
+        const destination = Math.min(targetY, maxScroll);
+        const startTime = performance.now();
+
+        function easeInOutQuad(t) { return t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t; }
+
+        function step(now) {
+            const elapsed = now - startTime;
+            const progress = Math.min(elapsed / duration, 1);
+            const eased = easeInOutQuad(progress);
+            window.scrollTo(0, Math.round(startY + (destination - startY) * eased));
+            if (progress < 1) {
+                requestAnimationFrame(step);
+            } else if (typeof callback === 'function') {
+                callback();
+            }
+        }
+
+        requestAnimationFrame(step);
+    }
+
+    // Intercept anchor links that jump to phases (e.g. href="#phase-2") and do a slow scroll instead
+    document.querySelectorAll('a[href^="#phase"]').forEach(anchor => {
+        anchor.addEventListener('click', (e) => {
+            const href = anchor.getAttribute('href');
+            if (!href || href.charAt(0) !== '#') return;
+            const id = href.slice(1);
+            const el = document.getElementById(id);
+            if (!el) return; // allow default for non-existing targets
+
+            // Respect users who prefer reduced motion
+            if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+                // let the browser jump to the anchor; it's okay
+                return;
+            }
+
+            // Prevent instant jump and perform slow scroll
+            e.preventDefault();
+            smoothScrollTo(el, SCROLL_DURATION, () => {
+                // update URL without causing another jump
+                history.pushState(null, document.title, '#' + id);
+
+                // optional: briefly focus the target for accessibility
+                el.setAttribute('tabindex', '-1');
+                el.focus({preventScroll:true});
+                setTimeout(() => el.removeAttribute('tabindex'), 1500);
+            });
+        });
+    });
 });
